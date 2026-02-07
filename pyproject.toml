@@ -3,7 +3,7 @@ requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "uv_base"
+name = "AI_Organize"
 version = "0.1.0"
 authors = [
     {name = "Akinus21"}
@@ -31,9 +31,9 @@ dependencies = [
 ]
 
 [project.scripts]
-uv_base = "uv_base.__main__:main"
-uv_base_update = "akinus_utils.utils.update:main"
-uv_base_install = "akinus_utils.utils.uv:install_project_dependencies"
+AI_Organize = "AI_Organize.__main__:main"
+AI_Organize_update = "akinus_utils.utils.update:main"
+AI_Organize_install = "akinus_utils.utils.uv:install_project_dependencies"
 
 # Use setuptools package discovery here:
 [tool.setuptools.packages.find]
