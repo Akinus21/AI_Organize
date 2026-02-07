@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "uv_base"
+version = "0.1.0"
+authors = [
+    {name = "Akinus21"}
+]
+description = "A Hello World CLI using uv"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests",
+    "toml",
+    "packaging",
+    "win10toast; sys_platform == 'win32'",
+    "numpy>=2.2.6",
+    "stdlib-list>=0.11.1",
+    "ollama>=0.5.3",
+    "arxiv>=2.2.0",
+    "bs4>=0.0.2",
+    "dotenv>=0.9.9",
+    "nest-asyncio>=1.6.0",
+    "readability-lxml>=0.8.4.1",
+    "mcp>=1.13.0",
+    "google-api-python-client>=2.179.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.2",
+]
+
+[project.scripts]
+uv_base = "uv_base.__main__:main"
+uv_base_update = "akinus_utils.utils.update:main"
+uv_base_install = "akinus_utils.utils.uv:install_project_dependencies"
+
+# Use setuptools package discovery here:
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*"]
