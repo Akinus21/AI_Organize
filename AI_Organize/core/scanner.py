@@ -1,0 +1,161 @@
+import asyncio
+import json
+import hashlib
+from pathlib import Path
+from typing import List
+
+from AI_Organize.core.models import DirectoryContext
+from AI_Organize.docs.directory_fingerprint import directory_fingerprint
+from AI_Organize.docs.directory_summary import (
+    get_or_update_directory_summary,
+)
+
+
+# ============================================================
+# Ignore rules
+# ============================================================
+
+class IgnoreRules:
+    def __init__(self, patterns: List[str]):
+        self.patterns = patterns or []
+
+    def should_ignore(self, path: Path) -> bool:
+        name = path.name
+        for pat in self.patterns:
+            if path.match(pat) or name == pat:
+                return True
+        return False
+
+
+# ============================================================
+# ASYNC IMPLEMENTATION (single source of truth)
+# ============================================================
+
+async def scan_directory_async(
+    root: Path,
+    *,
+    ignore: IgnoreRules | None = None,
+    max_depth: int = -1,
+    ai_call=None,
+    model: str,
+) -> List[DirectoryContext]:
+    """
+    Scan a directory tree and return DirectoryContext objects.
+
+    - Attaches cached AI-generated directory summaries
+    - Preserves README.md content except # Directory Description
+    - Avoids AI calls when directory contents haven't changed
+    - NEVER fails if AI fails
+    """
+
+    if not model:
+        raise ValueError("AI model must be provided for directory summary generation")
+
+
+    root = root.resolve()
+    contexts: List[DirectoryContext] = []
+
+    if not root.exists():
+        return contexts
+
+    def depth_ok(path: Path) -> bool:
+        if max_depth < 0:
+            return True
+        return len(path.relative_to(root).parts) <= max_depth
+
+    # 🔑 IMPORTANT: include root itself
+    directories = [root] + sorted(p for p in root.rglob("*") if p.is_dir())
+
+    for path in directories:
+        if not depth_ok(path):
+            continue
+
+        if ignore and ignore.should_ignore(path):
+            continue
+
+        summary = None
+        cache_path = path / ".ai_directory_summary.json"
+        fingerprint = directory_fingerprint(path)
+
+        if cache_path.exists():
+            cached = json.load(cache_path.open())
+            if cached.get("fingerprint") == fingerprint:
+                summary = cached["summary"]
+
+        if summary is None and ai_call:
+            try:
+                summary = await get_or_update_directory_summary(
+                    path,
+                    model=model,
+                    ai_call=ai_call,
+                )
+            except Exception:
+                summary = None
+
+        from AI_Organize.docs.directory_readme import update_directory_readme
+
+        if summary:
+            update_directory_readme(path, summary)
+
+        files = []
+        subdirs = []
+
+        for child in path.iterdir():
+            if ignore and ignore.should_ignore(child):
+                continue
+
+            if child.is_file():
+                files.append(child.name)
+            elif child.is_dir():
+                subdirs.append(child.name)
+
+        ctx = DirectoryContext(
+            path=path,
+            name=path.name,
+            description=summary,
+            files=files,
+            subdirectories=subdirs,
+        )
+        contexts.append(ctx)
+
+    return contexts
+
+
+# ============================================================
+# SYNC WRAPPER (for legacy tests + simple use)
+# ============================================================
+
+def scan_directory(
+    root: Path,
+    ignore=None,
+    max_depth: int = -1,
+    *,
+    ai_call=None,
+    model: str = "llama3.2",
+):
+    """
+    Public entry point.
+    Works in both sync and async contexts.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(
+            scan_directory_async(
+                root,
+                ignore=ignore,
+                max_depth=max_depth,
+                ai_call=ai_call,
+                model=model,
+            )
+        )
+
+    return loop.create_task(
+        scan_directory_async(
+            root,
+            ignore=ignore,
+            max_depth=max_depth,
+            ai_call=ai_call,
+            model=model,
+        )
+    )
