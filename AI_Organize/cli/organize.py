@@ -16,7 +16,10 @@ from AI_Organize.ai.organizer import suggest_folders
 # ----------------------------
 
 DEFAULT_SETTINGS = {
-    "ai": {"model": "llama3.2"},
+    "ai": {
+        "model": "gpt-oss:120b-cloud",
+        "enable_directory_summaries": False,  # 👈 IMPORTANT
+    },
     "behavior": {
         "auto_move_enabled": True,
         "auto_move_threshold": 0.95,
@@ -48,6 +51,9 @@ def load_settings(project_root=None) -> Dict[str, Any]:
         else:
             merged[k] = v
 
+    if project_root is not None:
+        merged["_test_mode"] = True
+
     return merged
 
 
@@ -69,20 +75,39 @@ async def run(
     settings["behavior"].setdefault("auto_move_enabled", True)
     settings["behavior"].setdefault("auto_move_threshold", 0.95)
     settings["behavior"].setdefault("ask_global_threshold", 0.75)
-
     settings.setdefault("trash", {})
     settings["trash"].setdefault("retention_days", 30)
-
     settings.setdefault("ai", {})
     # --------------------------------
 
+    use_ai = True
 
     # -- Lazy imports from akinus modules --
     from akinus.utils.app_details import PROJECT_ROOT as DEFAULT_ROOT, APP_NAME
+    from AI_Organize.cli.model_resolution import resolve_ollama_model
 
     root = project_root or DEFAULT_ROOT
     if root is None:
         raise RuntimeError("Project root could not be determined")
+
+    model = None
+
+    is_test = project_root is not None
+
+    def ensure_model():
+        nonlocal model
+        if model is not None:
+            return model
+
+        # 🧪 TEST MODE: never prompt
+        if is_test:
+            model = settings["ai"]["model"]
+            return model
+
+        model = resolve_ollama_model(settings, root)
+        return model
+
+
 
     from akinus.utils.logger import log
     from akinus.ai.ollama import embed_with_ollama
@@ -112,18 +137,34 @@ async def run(
         project_root=root,
     )
 
+    use_directory_ai = bool(settings.get("ai", {}).get("enable_directory_summaries", True))
+
     directories = await scan_directory_async(
         root,
         ignore=ignore,
         max_depth=max_depth,
-        ai_call=ollama_query,
-        model=settings["ai"]["model"],
+        ai_call=ollama_query if use_directory_ai else None,
+        model=ensure_model() if use_directory_ai else None,
     )
 
     for directory in directories:
         for filename in list(directory.files):
             file_path = directory.path / filename
             if not file_path.exists():
+                continue
+
+            if directory.path == root / "data":
+                continue
+
+            if filename == "project.db":
+                continue
+
+            # Skip internal files
+            if file_path.name in {
+                "project.db",
+                ".ai_directory_summary.json",
+                "README.md",
+            }:
                 continue
 
             file_ctx = build_file_context(file_path)
@@ -133,6 +174,7 @@ async def run(
                 directories=directories,
                 memory=memory,
                 settings=settings,
+                model=ensure_model(),
             )
 
             if not suggestions:
@@ -176,7 +218,7 @@ async def run(
                         f"Source: {best['source']}"
                     ),
                 )
-                return
+                continue
 
             # ----------------------------
             # Interactive path
@@ -206,7 +248,7 @@ async def run(
                 )
                 if input("> ") == "DELETE":
                     move_to_trash(file_path, root)
-                return
+                continue
 
             if choice.isdigit():
                 idx = int(choice) - 1

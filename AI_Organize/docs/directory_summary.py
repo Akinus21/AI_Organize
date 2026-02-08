@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Callable
 import mimetypes
 
 from AI_Organize.docs.directory_fingerprint import directory_fingerprint

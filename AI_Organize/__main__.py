@@ -1,9 +1,11 @@
 import asyncio
-from akinus_utils import update
+import AI_Organize.cli.organize as organize_cli
+
 
 def main():
     # Run update check at start (non-blocking if you want, or blocking)
-    asyncio.run(update.perform_update())
+    #from akinus.utils.update import update
+    #asyncio.run(update.perform_update())
 
     # Your existing CLI logic
-    print("Hello from my_project CLI!")
+    asyncio.run(organize_cli.run())
