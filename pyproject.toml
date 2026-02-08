@@ -34,8 +34,8 @@ dependencies = [
 
 [project.scripts]
 AI_Organize = "AI_Organize.__main__:main"
-AI_Organize_update = "akinus_utils.utils.update:main"
-AI_Organize_install = "akinus_utils.utils.uv:install_project_dependencies"
+AI_Organize_update = "akinus.utils.update:main"
+AI_Organize_install = "akinus.utils.uv:install_project_dependencies"
 
 # Use setuptools package discovery here:
 [tool.setuptools.packages.find]

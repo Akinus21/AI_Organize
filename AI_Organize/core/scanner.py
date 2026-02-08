@@ -36,8 +36,8 @@ async def scan_directory_async(
     *,
     ignore: IgnoreRules | None = None,
     max_depth: int = -1,
-    ai_call=None,
-    model: str,
+    ai_call: str | None = None,
+    model: str | None = None,
 ) -> List[DirectoryContext]:
     """
     Scan a directory tree and return DirectoryContext objects.
@@ -48,12 +48,15 @@ async def scan_directory_async(
     - NEVER fails if AI fails
     """
 
-    if not model:
-        raise ValueError("AI model must be provided for directory summary generation")
-
+    use_ai = bool(ai_call and model)
 
     root = root.resolve()
     contexts: List[DirectoryContext] = []
+
+    INTERNAL_FILES = {
+        ".ai_directory_summary.json",
+        "README.md",
+    }
 
     if not root.exists():
         return contexts
@@ -70,19 +73,12 @@ async def scan_directory_async(
         if not depth_ok(path):
             continue
 
-        if ignore and ignore.should_ignore(path):
+        if path != root and ignore and ignore.should_ignore(path):
             continue
 
         summary = None
-        cache_path = path / ".ai_directory_summary.json"
-        fingerprint = directory_fingerprint(path)
 
-        if cache_path.exists():
-            cached = json.load(cache_path.open())
-            if cached.get("fingerprint") == fingerprint:
-                summary = cached["summary"]
-
-        if summary is None and ai_call:
+        if use_ai and path != root:
             try:
                 summary = await get_or_update_directory_summary(
                     path,
@@ -92,10 +88,10 @@ async def scan_directory_async(
             except Exception:
                 summary = None
 
-        from AI_Organize.docs.directory_readme import update_directory_readme
+        from AI_Organize.docs.directory_readme import update_directory_description
 
         if summary:
-            update_directory_readme(path, summary)
+            update_directory_description(path, summary)
 
         files = []
         subdirs = []
@@ -103,7 +99,8 @@ async def scan_directory_async(
         for child in path.iterdir():
             if ignore and ignore.should_ignore(child):
                 continue
-
+            if child.name in INTERNAL_FILES:
+                continue
             if child.is_file():
                 files.append(child.name)
             elif child.is_dir():
@@ -118,6 +115,9 @@ async def scan_directory_async(
         )
         contexts.append(ctx)
 
+    # Ensure root directory is first
+    contexts.sort(key=lambda c: len(c.path.parts))
+
     return contexts
 
 
@@ -130,16 +130,17 @@ def scan_directory(
     ignore=None,
     max_depth: int = -1,
     *,
-    ai_call=None,
-    model: str = "llama3.2",
+    ai_call: str | None = None,
+    model: str | None = None,
 ):
     """
-    Public entry point.
-    Works in both sync and async contexts.
+    Sync wrapper for scan_directory_async.
+    Safe under pytest-asyncio.
     """
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
+        # No running loop → safe to create one
         return asyncio.run(
             scan_directory_async(
                 root,
@@ -149,13 +150,16 @@ def scan_directory(
                 model=model,
             )
         )
-
-    return loop.create_task(
-        scan_directory_async(
-            root,
-            ignore=ignore,
-            max_depth=max_depth,
-            ai_call=ai_call,
-            model=model,
+    else:
+        # Running loop → must create a task
+        return loop.create_task(
+            scan_directory_async(
+                root,
+                ignore=ignore,
+                max_depth=max_depth,
+                ai_call=ai_call,
+                model=model,
+            )
         )
-    )
+
+
