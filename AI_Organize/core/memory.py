@@ -76,13 +76,23 @@ class MemoryStore:
             "SELECT extension, tokens, target_folder, directory_description, embedding, confidence FROM decisions"
         )
 
+        from akinus.ai.ollama import cosine_similarity
+
         results = []
+        emb_dim = len(embedding)
+
         for ext, tokens, folder, desc, emb_blob, conf in cur.fetchall():
             stored_vec = _deserialize_embedding(emb_blob)
 
-            from akinus.ai.ollama import cosine_similarity
-            score = cosine_similarity(embedding, stored_vec)
+            # 🔒 HARD SAFETY: skip incompatible embeddings
+            if stored_vec is None or len(stored_vec) != emb_dim:
+                continue
 
+            try:
+                score = cosine_similarity(embedding, stored_vec)
+            except Exception:
+                # Absolute last-resort guard — never let memory crash the app
+                continue
 
             results.append(
                 (
@@ -99,6 +109,7 @@ class MemoryStore:
 
         results.sort(key=lambda x: x[0], reverse=True)
         return results[:limit]
+
 
     # -------- Recording --------
 
