@@ -1,9 +1,15 @@
 import json
 from pathlib import Path
+import re
 from typing import List, Optional, Callable
 import mimetypes
 
 from AI_Organize.docs.directory_fingerprint import directory_fingerprint
+
+THINKING_BLOCK_RE = re.compile(
+    r"(thinking\.{0,3}|analysis:).*?(done thinking\.{0,3})",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 MAX_FILE_BYTES = 20_000       # hard cap per file
@@ -20,6 +26,20 @@ TEXT_MIME_PREFIXES = (
     "application/toml",
 )
 
+def strip_reasoning(text: str) -> str:
+    # Remove thinking blocks
+    cleaned = THINKING_BLOCK_RE.sub("", text)
+
+    # Also remove standalone markers if present
+    cleaned = re.sub(
+        r"^(thinking\.{0,3}|analysis:|done thinking\.{0,3})$",
+        "",
+        cleaned,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    return cleaned.strip()
+
 async def get_or_update_directory_summary(
     directory: Path,
     *,
@@ -31,7 +51,7 @@ async def get_or_update_directory_summary(
     otherwise regenerate it using AI and update cache.
     """
 
-    cache_path = directory / ".ai_directory_summary.json"
+    cache_path = directory / ".ai" / ".ai_directory_summary.json"
     fingerprint = directory_fingerprint(directory)
 
     # --- Cache hit ---
@@ -177,5 +197,7 @@ Directory purpose:
 """.strip()
 
     response = await ai_call(prompt, model)
+    response = strip_reasoning(response)
+
     return response.strip()
 

@@ -48,14 +48,20 @@ async def scan_directory_async(
     - NEVER fails if AI fails
     """
 
+    from akinus.utils.logger import log
+
     use_ai = bool(ai_call and model)
 
     root = root.resolve()
     contexts: List[DirectoryContext] = []
 
     INTERNAL_FILES = {
-        ".ai_directory_summary.json",
-        "README.md",
+         "README.md",  # we preserve README.md but ignore it for summary and listing
+         ".gitignore",
+         ".git",
+         ".DS_Store",
+         "Thumbs.db",
+         ".directory_summary_cache",  # legacy cache file to ignore
     }
 
     if not root.exists():
@@ -78,14 +84,19 @@ async def scan_directory_async(
 
         summary = None
 
-        if use_ai and path != root:
+        if use_ai:
             try:
                 summary = await get_or_update_directory_summary(
                     path,
                     model=model,
                     ai_call=ai_call,
                 )
-            except Exception:
+            except Exception as e:
+                await log(
+                    "ERROR",
+                    "scanner",
+                    f"AI summary failed for {path}, using cached or no summary. Error: {str(e)}",
+                )
                 summary = None
 
         from AI_Organize.docs.directory_readme import update_directory_description
@@ -113,6 +124,19 @@ async def scan_directory_async(
             files=files,
             subdirectories=subdirs,
         )
+
+        # await log(
+        #     "DEBUG",
+        #     "scanner",
+        #     (
+        #         f"\n\tScanned directory: {ctx.path}\n"
+        #         f"\tfiles={len(files)}\n"
+        #         f"\tsubdirs={len(subdirs)}\n"
+        #         f"\tai_summary={summary}\n"
+        #         f"\tused_ai={use_ai}, ai_call={ai_call}, model={model}"
+        #     )
+        # )
+        
         contexts.append(ctx)
 
     # Ensure root directory is first

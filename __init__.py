@@ -2,6 +2,7 @@
 
 from . import AI_Organize
 from . import akinus
+from . import build
 from . import data
 from . import logs
 from . import resources
@@ -13,6 +14,7 @@ __all__ = [
     "AI_Organize",
     "AI_Organize.egg-info",
     "akinus",
+    "build",
     "data",
     "logs",
     "resources",

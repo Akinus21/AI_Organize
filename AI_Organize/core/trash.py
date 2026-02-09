@@ -3,14 +3,16 @@ from datetime import datetime, timedelta
 import shutil
 from typing import Optional
 
-TRASH_DIR_NAME = ".ai_organize_trash"
+
+
+TRASH_DIR_NAME = "trash"
 DATE_FORMAT = "%Y-%m-%d"
 
 
 def get_trash_root(project_root: Optional[Path] = None) -> Path:
     from akinus.utils.app_details import PROJECT_ROOT
     root = project_root or PROJECT_ROOT
-    trash_root = root / TRASH_DIR_NAME
+    trash_root = root / ".ai" / TRASH_DIR_NAME
     trash_root.mkdir(parents=True, exist_ok=True)
 
     readme = trash_root / "README.md"
